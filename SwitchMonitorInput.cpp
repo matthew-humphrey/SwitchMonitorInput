@@ -36,6 +36,71 @@ private:
     }
 };
 
+class MonitorInputTypes
+{
+    std::map<BYTE, std::wstring> _inputCodeToName;
+    std::map<std::wstring, BYTE> _inputNameToCode;
+
+public:
+    MonitorInputTypes()
+    {
+        _inputCodeToName.insert({ 0x01, std::wstring(L"RGB1") });
+        _inputCodeToName.insert({ 0x02, std::wstring(L"RGB2") });
+        _inputCodeToName.insert({ 0x03, std::wstring(L"DVI1") });
+        _inputCodeToName.insert({ 0x04, std::wstring(L"DVI2") });
+        _inputCodeToName.insert({ 0x05, std::wstring(L"COMPOSITE1") });
+        _inputCodeToName.insert({ 0x06, std::wstring(L"COMPOSITE2") });
+        _inputCodeToName.insert({ 0x07, std::wstring(L"SVIDEO1") });
+        _inputCodeToName.insert({ 0x08, std::wstring(L"SVIDEO2") });
+        _inputCodeToName.insert({ 0x09, std::wstring(L"TUNER1") });
+        _inputCodeToName.insert({ 0x0A, std::wstring(L"TUNER2") });
+        _inputCodeToName.insert({ 0x0B, std::wstring(L"TUNER3") });
+        _inputCodeToName.insert({ 0x0C, std::wstring(L"COMPONENT1") });
+        _inputCodeToName.insert({ 0x0D, std::wstring(L"COMPONENT2") });
+        _inputCodeToName.insert({ 0x0E, std::wstring(L"COMPONENT3") });
+        _inputCodeToName.insert({ 0x0F, std::wstring(L"DP1") });
+        _inputCodeToName.insert({ 0x10, std::wstring(L"DP2") });
+        _inputCodeToName.insert({ 0x11, std::wstring(L"HDMI1") });
+        _inputCodeToName.insert({ 0x12, std::wstring(L"HDMI2") });
+        _inputCodeToName.insert({ 0x1b, std::wstring(L"USB-C") });
+
+        for (const auto& pair : _inputCodeToName)
+        {
+            _inputNameToCode[pair.second] = pair.first;
+        }
+    }
+
+    std::wstring InputCodeToName(BYTE inputCode)
+	{
+		auto it = _inputCodeToName.find(inputCode);
+		if (it == _inputCodeToName.end())
+		{
+			return std::wstring(L"UNKNOWN");
+		}
+
+		return it->second;
+	}
+
+    BYTE InputNameToCode(const std::wstring& inputName)
+    {
+        auto it = _inputNameToCode.find(inputName);
+        if (it == _inputNameToCode.end())
+        {
+            throw wruntime_error(L"Invalid input name");
+        }
+
+        return it->second;
+    }
+
+    void VisitInputNames(const std::function<void(const std::wstring& inputName)>& visitor)
+	{
+		for (const auto& pair : _inputNameToCode)
+		{
+			visitor(pair.first);
+		}
+	}
+};
+
 class MonitorControl
 {
 private:
@@ -46,9 +111,8 @@ private:
         std::vector<PHYSICAL_MONITOR> _physicalMonitors;
     };
 
-    std::map<BYTE, std::wstring> _inputCodeToName;
-    std::map<std::wstring, BYTE> _inputNameToCode;
     std::vector<DisplayInfo> _displays;
+    MonitorInputTypes _monitorInputTypes;
 
     HANDLE GetPhysicalMonitorHandle(DWORD displayIndex, DWORD physicalMonitorIndex)
     {
@@ -123,31 +187,6 @@ public:
 
     explicit MonitorControl()
     {
-        _inputCodeToName.insert({ 0x01, std::wstring(L"RGB1") });
-        _inputCodeToName.insert({0x02, std::wstring(L"RGB2")});
-        _inputCodeToName.insert({0x03, std::wstring(L"DVI1")});
-        _inputCodeToName.insert({0x04, std::wstring(L"DVI2")});
-        _inputCodeToName.insert({0x05, std::wstring(L"COMPOSITE1")});
-        _inputCodeToName.insert({0x06, std::wstring(L"COMPOSITE2")});
-        _inputCodeToName.insert({0x07, std::wstring(L"SVIDEO1")});
-        _inputCodeToName.insert({0x08, std::wstring(L"SVIDEO2")});
-        _inputCodeToName.insert({0x09, std::wstring(L"TUNER1")});
-        _inputCodeToName.insert({0x0A, std::wstring(L"TUNER2")});
-        _inputCodeToName.insert({0x0B, std::wstring(L"TUNER3")});
-        _inputCodeToName.insert({0x0C, std::wstring(L"COMPONENT1")});
-        _inputCodeToName.insert({0x0D, std::wstring(L"COMPONENT2")});
-        _inputCodeToName.insert({0x0E, std::wstring(L"COMPONENT3")});
-        _inputCodeToName.insert({0x0F, std::wstring(L"DP1")});
-        _inputCodeToName.insert({0x10, std::wstring(L"DP2")});
-        _inputCodeToName.insert({0x11, std::wstring(L"HDMI1")});
-        _inputCodeToName.insert({0x12, std::wstring(L"HDMI2")});
-        _inputCodeToName.insert({0x1b, std::wstring(L"USB-C")});
-
-        for (const auto& pair : _inputCodeToName)
-        {
-            _inputNameToCode[pair.second] = pair.first;
-        }
-
         EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, reinterpret_cast<LPARAM>(this));
     }
 
@@ -185,14 +224,6 @@ public:
         }
     }
 
-    void VisitInputTypes(const std::function<void(const std::wstring& inputName, BYTE inputCode)>& visitor)
-    {
-        for (const auto& pair : _inputNameToCode)
-        {
-            visitor(pair.first, pair.second);
-        }
-    }
-
     BYTE GetMonitorInputCode(DWORD displayIndex, DWORD physicalMonitorIndex)
     {
         BYTE inputCode;
@@ -209,13 +240,7 @@ public:
     {
         BYTE inputCode = GetMonitorInputCode(displayIndex, physicalMonitorIndex);
 
-        auto it = _inputCodeToName.find(inputCode);
-        if (it == _inputCodeToName.end())
-        {
-            return std::wstring(L"Unknown Input Type");
-        }
-
-        return it->second;
+        return _monitorInputTypes.InputCodeToName(inputCode);
     }
 
     void SetMonitorInputByCode(DWORD displayIndex, DWORD physicalMonitorIndex, BYTE inputCode)
@@ -230,13 +255,9 @@ public:
     {
         std::transform(inputName.begin(), inputName.end(), inputName.begin(), ::towupper);
 
-        auto it = _inputNameToCode.find(inputName);
-        if (it == _inputNameToCode.end())
-        {
-            throw wruntime_error(L"Invalid input name");
-        }
+        BYTE inputCode = _monitorInputTypes.InputNameToCode(inputName);
 
-        SetMonitorInputByCode(displayIndex, physicalMonitorIndex, it->second);
+        SetMonitorInputByCode(displayIndex, physicalMonitorIndex, inputCode);
     }
 };
 
@@ -245,17 +266,20 @@ void PrintUsage(const wchar_t* progName)
     std::wcout << L"Usage: " << progName << " [options]" << std::endl;
     std::wcout << L"Options:" << std::endl;
     std::wcout << L"  -l: List all physical monitors" << std::endl;
-    std::wcout << L"  -i input_name: Set monitor input (DP1, DP2, HDMI1, HDMI2, ...)" << std::endl;
+    std::wcout << L"  -i input_name: Set monitor input (see list of valid inputs below)" << std::endl;
     std::wcout << L"  -d display_index: Index of the display (default: 1)" << std::endl;
     std::wcout << L"  -m monitor_index: Physical monitor index for the specified display (default: 1)" << std::endl;
     std::wcout << L"  -s : Show list of valid input names" << std::endl;
+    std::wcout << std::endl;
+    std::wcout << L"Input names:" << std::endl;
+    MonitorInputTypes mit;
+    mit.VisitInputNames([](const std::wstring& inputName) { std::wcout << L"  " << inputName << std::endl; });
 }
 
 struct CmdLineArgs
 {
     bool _listMonitors{};
     bool _setInput{};
-    bool _showInputNames{};
     std::wstring _inputName;
     DWORD _displayIndex{};
     DWORD _physicalMonitorIndex{};
@@ -319,10 +343,6 @@ void ParseArgs(int argc, wchar_t* argv[], CmdLineArgs& args)
                 throw wruntime_error(L"Missing argument to -m");
             }
         }
-        else if (arg == L"-s")
-        {
-            args._showInputNames = true;
-        }
         else
         {
             throw wruntime_error(L"Unknown argument: " + arg);
@@ -345,15 +365,6 @@ int wmain(int argc, wchar_t* argv[])
         ParseArgs(argc, argv, args);
 
         MonitorControl mc;
-
-        if (args._showInputNames)
-        {
-            std::wcout << "Monitor Input Types: " << std::endl;
-            mc.VisitInputTypes([](const std::wstring& inputName, BYTE inputCode)
-                {
-                    std::wcout << L"  " << inputName << std::endl;
-                });
-        }
 
         if (args._listMonitors)
         {
